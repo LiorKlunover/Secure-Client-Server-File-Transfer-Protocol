@@ -3,6 +3,7 @@ from Crypto.PublicKey import RSA
 from Crypto.Util.Padding import pad, unpad
 from Crypto.Random import get_random_bytes
 from base64 import b64decode
+import zlib
 
 AES_KEY_SIZE = 32
 class AES_EncryptionKey:
@@ -10,7 +11,7 @@ class AES_EncryptionKey:
         self.aes_key = get_random_bytes(AES_KEY_SIZE)  # AES-256 key
         self.iv = get_random_bytes(16)  # IV for CBC mode
         self.client_public_key = None
-        self.crc = 0
+        self.checksum = 0
 
     # Receive the client's RSA public key base64 encoded
     def receive_rsa_public_key(self, public_key_data):
@@ -68,18 +69,15 @@ class AES_EncryptionKey:
             file_out.write(decrypted_file)
 
         # Calculate checksum
-        checksum = self.calculate_checksum(decrypted_file)
-        return checksum
+        self.checksum = self.calculate_checksum_crc32(decrypted_file)
+        return self.checksum
 
     def update_aes_key(self, new_aes_key):
         self.aes_key = new_aes_key
 
-
-    def calculate_checksum(self, data):
-        # Return the checksum of the data (could be an MD5 or SHA256)
-        from hashlib import sha256
-        return sha256(data).hexdigest()
-
+    # Return the checksum of the data crc32
+    def calculate_checksum_crc32(self, data: bytes):
+        return zlib.crc32(data)
 
 # # Test the AES_EncryptionKey class
 # public_key = "MIIBIDANBgkqhkiG9w0BAQEFAAOCAQ0AMIIBCAKCAQEAlOnUMm2ESsbCUudERVTYcYhY4plU\nGIfuFt9mwXCNxbf1M5AXOfjTIpUw/ix3YhsFOo5fJDmE4gITc7uO58xvexEbMt3Dq5De2Hn8\nKlJSi1Q7VOk0pbz19HLN6edqPsh71MmRDKZy3K6k+NgK9spanx/NuRWXs53JtPKbdQ+Qbngc\nwrcHzIO4op3rjCfelCVraPOQn9FOzlZ7qcYXhe22B6w2p723W++2xXELa/FXtWbRBWE0Aolk\nQSYaqlcZdaKPB0JG7scEzHKLSncVIpSkpZxpmYAc/wh5tsBUZXJNE2IMp7hLPkWNiIF2SIjo\ngdu8F3UaBRNbMjw6nNWP8YsYpQIBEQ==\n"

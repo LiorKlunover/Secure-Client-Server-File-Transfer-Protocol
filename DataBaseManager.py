@@ -44,7 +44,7 @@ class DataBaseManager:
     def add_client(self, client_name, conn) -> bool:
         with DataBaseManager.shared_lock:
             try:
-                if self.check_client_name(client_name, conn):
+                if self.check_client_name_exists(client_name, conn):
                     print("Client already exists")
                     return False
                 client_id = uuid.uuid4().bytes  # Generate a 128-bit UUID
@@ -59,8 +59,6 @@ class DataBaseManager:
                 print(e)
                 return False
         return False
-
-    import sqlite3
 
     def add_file(self, client_id, file_name, path_name, verified, conn):
         with DataBaseManager.shared_lock:
@@ -99,17 +97,33 @@ class DataBaseManager:
                     print(f"Error inserting file: {e}")
             finally:
                 cursor.close()
-    def update_file_verified(self, client_id, verified):
+                conn.close()
+                print("Connection to DB closed.")
+    def check_file_exists(self, client_id, file_name):
+        with DataBaseManager.shared_lock:
+            try:
+                conn = self.create_connection()
+                cursor = conn.execute('''
+                    SELECT COUNT(*) FROM files WHERE client_id = ? AND file_name = ?
+                ''', (client_id, file_name))
+                result = cursor.fetchone()[0] > 0
+                conn.close()
+                return result
+            except sqlite3.Error as e:
+                print(e)
+                return False
+    def update_file_verified(self, client_id, file_name, verified):
         with DataBaseManager.shared_lock:
             try:
                 conn = self.create_connection()
                 conn.execute('''
-                    UPDATE files SET verified = ? WHERE client_id = ?
-                ''', (verified, client_id))
+                    UPDATE files SET verified = ? WHERE client_id = ? AND file_name = ?
+                ''', (verified, client_id, file_name))
                 conn.commit()
                 conn.close()
             except sqlite3.Error as e:
                 print(e)
+
     def add_public_key(self, client_id, public_key):
         with DataBaseManager.shared_lock:
             try:
@@ -173,7 +187,7 @@ class DataBaseManager:
             except sqlite3.Error as e:
                 print(e)
                 return None
-    def check_client_name(self, client_name, conn) -> bool:
+    def check_client_name_exists(self, client_name, conn) -> bool:
         try:
             cursor = conn.execute('''
                            SELECT COUNT(*) FROM clients WHERE client_name = ?

@@ -72,7 +72,6 @@ class ClientHandler:
                 total_sent += sent
             print("Sent all data")
 
-
     def receive(self):
         """Receives data from the client in a thread-safe manner, in chunks of 1024 bytes."""
         with ClientHandler.shared_lock:
@@ -98,9 +97,9 @@ class ClientHandler:
         self.op_code = int.from_bytes(self.client_header[17:19], 'big')
         self.payload_size = int.from_bytes(self.client_header[19:HEADER_SIZE], 'big')
         self.payload = self.client_header[HEADER_SIZE:]
-        self.handel_client_request_opCode()
+        self.handel_received_opCode()
 
-    def handel_client_request_opCode(self):
+    def handel_received_opCode(self):
         if self.op_code == REGISTER_REQUEST:
             self.register()
 
@@ -128,15 +127,15 @@ class ClientHandler:
             else:
                 try:
                     self.cksum = self.aes_key_obj.decrypt_and_save_file(self.payload, self.file_name)
+                    print(f"csum: {self.cksum}")
                     self.database.add_file(self.client_id_binary, self.file_name, self.file_name, 0, self.conn_db)
                     self.op_code = RECEIVED_FILE_ACK_WITH_CRC
                 except Exception as e:
                     print(f"Error decrypting file: {e}")
                     self.op_code = CRC_NOT_OK
 
-
         elif self.op_code == CRC_OK:
-            self.database.update_file_verified(self.client_id_binary, self.file_name, self.file_name, 0)
+            self.database.update_file_verified(self.client_id_binary, self.file_name, True)
             self.op_code = RECEIVED_MESSAGE_ACK
 
         elif self.op_code == CRC_NOT_OK:
@@ -158,7 +157,8 @@ class ClientHandler:
             self.payload = b''
         elif op_code == RECEIVED_FILE_ACK_WITH_CRC:
             self.add_payload(self.encrypted_file_size)
-            self.add_payload(self.file_name + b'\0' * (STRING_SIZE - len(self.file_name)))
+            file_name = self.file_name.encode('utf-8') + b'\0' * (STRING_SIZE - len(self.file_name))
+            self.add_payload(file_name)
             self.add_payload(self.cksum)
         self.header_to_send = self.create_header_to_send(op_code)
 
