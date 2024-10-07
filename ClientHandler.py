@@ -15,6 +15,7 @@ RECEIVE_FILE = 828
 CRC_OK = 900
 CRC_NOT_OK = 901
 CRC_TERMINATION = 902
+TERMINATION_REQUEST = 903
 
 REGISTER_ACK = 1600
 REGISTER_NACK = 1601
@@ -47,7 +48,6 @@ class ClientHandler:
         self.file_name = None
         self.cksum = 0
         self.flag_connected = True
-        self.conn_db = self.database.create_connection()
         self.aes_key_obj = AES_EncryptionKey()
 
     def start(self):
@@ -57,12 +57,15 @@ class ClientHandler:
 
         if self.flag_connected:
             self.start()
+        else:
+            print("Terminating connection")
 
     def send(self, data):
         """Sends data to the client in a thread-safe manner using a shared lock."""
         with ClientHandler.shared_lock:
             print('Sending data...')
-            print('op code:', self.op_code)
+
+            print('Sending op code: ', self.op_code)
             total_sent = 0
             while total_sent < len(data):
                 sent = self.client_socket.send(data[total_sent:total_sent + CHUNK_SIZE])
@@ -78,12 +81,11 @@ class ClientHandler:
             chunks = []
             while True:
                 chunk = self.client_socket.recv(CHUNK_SIZE)
-                print(f"Received {len(chunk)} bytes")
                 if not chunk or len(chunk) < CHUNK_SIZE:
                     chunks.append(chunk)
                     break
                 chunks.append(chunk)
-            print("Received all chunks")
+            print("Received all chunks: ", len(chunks))
             self.client_header = b''.join(chunks)
 
         self.parse_header()
@@ -95,6 +97,7 @@ class ClientHandler:
         self.client_id = uuid.UUID(bytes = self.client_id_binary)
         self.version = self.client_header[16]
         self.op_code = int.from_bytes(self.client_header[17:19], 'big')
+        print(f"Received op code: {self.op_code}")
         self.payload_size = int.from_bytes(self.client_header[19:HEADER_SIZE], 'big')
         self.payload = self.client_header[HEADER_SIZE:]
         self.handel_received_opCode()
@@ -112,7 +115,7 @@ class ClientHandler:
 
         elif self.op_code == RECONNECT_REQUEST:
             if self.load_client_from_db():
-                self.op_code = RECEIVED_PUBLIC_KEY_ACK_SENDING_AES
+                self.op_code = RECONNECT_ACK_SENDING_AES
             else:
                 self.op_code = RECONNECT_NACK
         elif self.op_code == RECEIVE_FILE:
@@ -128,29 +131,32 @@ class ClientHandler:
                 try:
                     self.cksum = self.aes_key_obj.decrypt_and_save_file(self.payload, self.file_name)
                     print(f"csum: {self.cksum}")
-                    self.database.add_file(self.client_id_binary, self.file_name, self.file_name, 0, self.conn_db)
-                    self.op_code = RECEIVED_FILE_ACK_WITH_CRC
+                    if self.database.add_file(self.client_id_binary, self.file_name, self.file_name, 0):
+                        self.op_code = RECEIVED_FILE_ACK_WITH_CRC
+                    else:
+                        self.op_code = GENERAL_ERROR
                 except Exception as e:
                     print(f"Error decrypting file: {e}")
-                    self.op_code = CRC_NOT_OK
+                    self.op_code = GENERAL_ERROR
 
         elif self.op_code == CRC_OK:
             self.database.update_file_verified(self.client_id_binary, self.file_name, True)
             self.op_code = RECEIVED_MESSAGE_ACK
-
+            self.flag_connected = False
         elif self.op_code == CRC_NOT_OK:
             self.op_code = RECEIVED_FILE_ACK_WITH_CRC
 
         elif self.op_code == CRC_TERMINATION:
             self.op_code = RECEIVED_MESSAGE_ACK
-
+        elif self.op_code == TERMINATION_REQUEST:
+            self.op_code = RECEIVED_MESSAGE_ACK
         else:
             self.op_code = GENERAL_ERROR
         self.handle_send_opCode(self.op_code)
 
     def handle_send_opCode(self, op_code):
         self.payload = self.client_id_binary
-        if op_code == RECEIVED_PUBLIC_KEY_ACK_SENDING_AES:
+        if op_code == RECEIVED_PUBLIC_KEY_ACK_SENDING_AES or op_code == RECONNECT_ACK_SENDING_AES:
             aes_key = self.aes_key_obj.get_encrypted_aes_key()
             self.add_payload(aes_key)
         elif op_code == REGISTER_NACK:
@@ -160,11 +166,13 @@ class ClientHandler:
             file_name = self.file_name.encode('utf-8') + b'\0' * (STRING_SIZE - len(self.file_name))
             self.add_payload(file_name)
             self.add_payload(self.cksum)
+        elif op_code == RECEIVED_MESSAGE_ACK:
+            self.flag_connected = False
         self.header_to_send = self.create_header_to_send(op_code)
 
     def register(self):
         self.client_name = self.payload.split(b'\0', 1)[0].decode('utf-8')
-        if self.database.add_client(self.client_name, self.conn_db):
+        if self.database.add_client(self.client_name):
             print(f"Client {self.client_name} registered successfully")
             self.op_code = REGISTER_ACK
             self.client_id_binary = self.database.get_client_id(self.client_name)
@@ -172,8 +180,6 @@ class ClientHandler:
         else:
             print(f"Client {self.client_name} failed to register")
             self.op_code = REGISTER_NACK
-
-
 
     def create_header_to_send(self, opcode):
         """Creates a header with the given opcode and payload."""
