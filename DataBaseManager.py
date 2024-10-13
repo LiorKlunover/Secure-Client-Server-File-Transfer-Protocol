@@ -149,7 +149,7 @@ class DataBaseManager:
         except sqlite3.Error as e:
             print(e)
             return False
-    def update_file_verified(self, client_id, file_name, verified):
+    def update_file_verified(self, client_id, file_name, verified) -> None:
         with DataBaseManager.shared_lock:
             try:
                 conn = self._create_connection()
@@ -161,7 +161,7 @@ class DataBaseManager:
             except sqlite3.Error as e:
                 print(e)
 
-    def add_public_key(self, client_id, public_key):
+    def add_public_key(self, client_id, public_key) -> None:
         with DataBaseManager.shared_lock:
             try:
                 conn = self._create_connection()
@@ -172,7 +172,7 @@ class DataBaseManager:
                 conn.close()
             except sqlite3.Error as e:
                 print(e)
-    def add_aes_key(self, client_id, aes_key):
+    def add_aes_key(self, client_id, aes_key) -> None:
         with DataBaseManager.shared_lock:
             try:
                 conn = self._create_connection()
@@ -184,7 +184,7 @@ class DataBaseManager:
             except sqlite3.Error as e:
                 print(e)
 
-    def get_client(self, client_id):
+    def get_client(self, client_id) -> Optional[Tuple[str, str, str, str]]:
         with DataBaseManager.shared_lock:
             try:
                 conn = self._create_connection()
@@ -198,7 +198,7 @@ class DataBaseManager:
                 print(e)
                 return None
 
-    def get_client_id(self, client_name):
+    def get_client_id(self, client_name) -> Optional[bytes]:
         with DataBaseManager.shared_lock:
             try:
                 conn = self._create_connection()
@@ -221,7 +221,7 @@ class DataBaseManager:
             print(e)
             return False
 
-    def get_aes_key(self, client_id):
+    def get_aes_key(self, client_id) -> Optional[str]:
         with DataBaseManager.shared_lock:
             try:
                 conn = self._create_connection()
@@ -234,7 +234,8 @@ class DataBaseManager:
             except sqlite3.Error as e:
                 print(e)
                 return None
-    def update_last_seen(self, client_id):
+
+    def update_last_seen(self, client_id) -> None:
         with DataBaseManager.shared_lock:
             try:
                 conn = self._create_connection()

@@ -4,91 +4,202 @@ from Crypto.Util.Padding import pad, unpad
 from Crypto.Random import get_random_bytes
 from base64 import b64decode
 import zlib
+import sys
 
-AES_KEY_SIZE = 32
+crctab = [ 0x00000000, 0x04c11db7, 0x09823b6e, 0x0d4326d9, 0x130476dc,
+        0x17c56b6b, 0x1a864db2, 0x1e475005, 0x2608edb8, 0x22c9f00f,
+        0x2f8ad6d6, 0x2b4bcb61, 0x350c9b64, 0x31cd86d3, 0x3c8ea00a,
+        0x384fbdbd, 0x4c11db70, 0x48d0c6c7, 0x4593e01e, 0x4152fda9,
+        0x5f15adac, 0x5bd4b01b, 0x569796c2, 0x52568b75, 0x6a1936c8,
+        0x6ed82b7f, 0x639b0da6, 0x675a1011, 0x791d4014, 0x7ddc5da3,
+        0x709f7b7a, 0x745e66cd, 0x9823b6e0, 0x9ce2ab57, 0x91a18d8e,
+        0x95609039, 0x8b27c03c, 0x8fe6dd8b, 0x82a5fb52, 0x8664e6e5,
+        0xbe2b5b58, 0xbaea46ef, 0xb7a96036, 0xb3687d81, 0xad2f2d84,
+        0xa9ee3033, 0xa4ad16ea, 0xa06c0b5d, 0xd4326d90, 0xd0f37027,
+        0xddb056fe, 0xd9714b49, 0xc7361b4c, 0xc3f706fb, 0xceb42022,
+        0xca753d95, 0xf23a8028, 0xf6fb9d9f, 0xfbb8bb46, 0xff79a6f1,
+        0xe13ef6f4, 0xe5ffeb43, 0xe8bccd9a, 0xec7dd02d, 0x34867077,
+        0x30476dc0, 0x3d044b19, 0x39c556ae, 0x278206ab, 0x23431b1c,
+        0x2e003dc5, 0x2ac12072, 0x128e9dcf, 0x164f8078, 0x1b0ca6a1,
+        0x1fcdbb16, 0x018aeb13, 0x054bf6a4, 0x0808d07d, 0x0cc9cdca,
+        0x7897ab07, 0x7c56b6b0, 0x71159069, 0x75d48dde, 0x6b93dddb,
+        0x6f52c06c, 0x6211e6b5, 0x66d0fb02, 0x5e9f46bf, 0x5a5e5b08,
+        0x571d7dd1, 0x53dc6066, 0x4d9b3063, 0x495a2dd4, 0x44190b0d,
+        0x40d816ba, 0xaca5c697, 0xa864db20, 0xa527fdf9, 0xa1e6e04e,
+        0xbfa1b04b, 0xbb60adfc, 0xb6238b25, 0xb2e29692, 0x8aad2b2f,
+        0x8e6c3698, 0x832f1041, 0x87ee0df6, 0x99a95df3, 0x9d684044,
+        0x902b669d, 0x94ea7b2a, 0xe0b41de7, 0xe4750050, 0xe9362689,
+        0xedf73b3e, 0xf3b06b3b, 0xf771768c, 0xfa325055, 0xfef34de2,
+        0xc6bcf05f, 0xc27dede8, 0xcf3ecb31, 0xcbffd686, 0xd5b88683,
+        0xd1799b34, 0xdc3abded, 0xd8fba05a, 0x690ce0ee, 0x6dcdfd59,
+        0x608edb80, 0x644fc637, 0x7a089632, 0x7ec98b85, 0x738aad5c,
+        0x774bb0eb, 0x4f040d56, 0x4bc510e1, 0x46863638, 0x42472b8f,
+        0x5c007b8a, 0x58c1663d, 0x558240e4, 0x51435d53, 0x251d3b9e,
+        0x21dc2629, 0x2c9f00f0, 0x285e1d47, 0x36194d42, 0x32d850f5,
+        0x3f9b762c, 0x3b5a6b9b, 0x0315d626, 0x07d4cb91, 0x0a97ed48,
+        0x0e56f0ff, 0x1011a0fa, 0x14d0bd4d, 0x19939b94, 0x1d528623,
+        0xf12f560e, 0xf5ee4bb9, 0xf8ad6d60, 0xfc6c70d7, 0xe22b20d2,
+        0xe6ea3d65, 0xeba91bbc, 0xef68060b, 0xd727bbb6, 0xd3e6a601,
+        0xdea580d8, 0xda649d6f, 0xc423cd6a, 0xc0e2d0dd, 0xcda1f604,
+        0xc960ebb3, 0xbd3e8d7e, 0xb9ff90c9, 0xb4bcb610, 0xb07daba7,
+        0xae3afba2, 0xaafbe615, 0xa7b8c0cc, 0xa379dd7b, 0x9b3660c6,
+        0x9ff77d71, 0x92b45ba8, 0x9675461f, 0x8832161a, 0x8cf30bad,
+        0x81b02d74, 0x857130c3, 0x5d8a9099, 0x594b8d2e, 0x5408abf7,
+        0x50c9b640, 0x4e8ee645, 0x4a4ffbf2, 0x470cdd2b, 0x43cdc09c,
+        0x7b827d21, 0x7f436096, 0x7200464f, 0x76c15bf8, 0x68860bfd,
+        0x6c47164a, 0x61043093, 0x65c52d24, 0x119b4be9, 0x155a565e,
+        0x18197087, 0x1cd86d30, 0x029f3d35, 0x065e2082, 0x0b1d065b,
+        0x0fdc1bec, 0x3793a651, 0x3352bbe6, 0x3e119d3f, 0x3ad08088,
+        0x2497d08d, 0x2056cd3a, 0x2d15ebe3, 0x29d4f654, 0xc5a92679,
+        0xc1683bce, 0xcc2b1d17, 0xc8ea00a0, 0xd6ad50a5, 0xd26c4d12,
+        0xdf2f6bcb, 0xdbee767c, 0xe3a1cbc1, 0xe760d676, 0xea23f0af,
+        0xeee2ed18, 0xf0a5bd1d, 0xf464a0aa, 0xf9278673, 0xfde69bc4,
+        0x89b8fd09, 0x8d79e0be, 0x803ac667, 0x84fbdbd0, 0x9abc8bd5,
+        0x9e7d9662, 0x933eb0bb, 0x97ffad0c, 0xafb010b1, 0xab710d06,
+        0xa6322bdf, 0xa2f33668, 0xbcb4666d, 0xb8757bda, 0xb5365d03,
+        0xb1f740b4 ]
+
+UNSIGNED = lambda n: n & 0xffffffff
+AES_KEY_SIZE = 32  # AES-256 key size
+IV_SIZE = 16  # IV size for AES CBC mode
 class AES_EncryptionKey:
+    """
+       Handles AES encryption, decryption, and key management, including
+       RSA-based key exchange.
+       """
+
     def __init__(self):
-        self.aes_key = get_random_bytes(AES_KEY_SIZE)  # AES-256 key
-        self.iv = get_random_bytes(16)  # IV for CBC mode
-        self.client_public_key = None
-        self.checksum = 0
+        self.aes_key = get_random_bytes(AES_KEY_SIZE)  # Generate AES-256 key
+        self.iv = get_random_bytes(IV_SIZE)  # Generate IV for CBC mode
+        self.client_public_key = None  # Placeholder for client's public RSA key
+        self.checksum = 0  # To store checksum of decrypted data
 
     # Receive the client's RSA public key base64 encoded
-    def receive_rsa_public_key(self, public_key_data):
+    def receive_rsa_public_key(self, public_key_data: str) -> None:
+        """
+        Receives and sets the client's RSA public key.
+
+        Args:
+            public_key_data (str): Base64 encoded RSA public key.
+
+        Raises:
+            ValueError: If the provided public key format is invalid.
+        """
         try:
             decoded_key = b64decode(public_key_data)
             self.client_public_key = RSA.import_key(decoded_key)
-            print("Public key received:", self.client_public_key)
+            print("Public key received successfully.")
+        except (ValueError, IndexError, TypeError) as e:
+            raise ValueError(f"Invalid public key format: {e}")
 
-        except (ValueError, IndexError, TypeError):
-            raise ValueError("Invalid public key format")
+    def get_aes_key(self) -> bytes:
+        """
+        Returns the raw AES key.
 
-
-    def get_aes_key(self):
+        Returns:
+            bytes: The AES-256 key.
+        """
         return self.aes_key
 
-    #get the ebncrypted aes key by bytes
     def get_encrypted_aes_key(self) -> bytes:
-        # Ensure that the client's public key is set
+        """
+        Encrypts the AES key and IV using the client's RSA public key.
+
+        Returns:
+            bytes: Encrypted AES key and IV.
+
+        Raises:
+            ValueError: If the client's RSA public key is not set or the RSA key size is too small.
+        """
         if self.client_public_key is None:
             raise ValueError("Client's RSA public key not set.")
 
-        # Create the cipher using the public key and PKCS1_OAEP padding
         cipher_rsa = PKCS1_OAEP.new(self.client_public_key)
-
-        # Encrypt AES key + IV, ensure RSA key size is adequate
         combined_key_iv = self.aes_key + self.iv
 
-        if len(combined_key_iv) > (self.client_public_key.size_in_bytes() - 42):  # 42 bytes overhead for OAEP padding
-            raise ValueError("RSA key size too small to encrypt AES key and IV")
+        if len(combined_key_iv) > (self.client_public_key.size_in_bytes() - 42):  # 42 bytes for OAEP padding
+            raise ValueError("RSA key size too small to encrypt AES key and IV.")
 
         encrypted_aes_key = cipher_rsa.encrypt(combined_key_iv)
+        return encrypted_aes_key
 
-        return encrypted_aes_key  # This returns the encrypted AES key + IV as bytes
+    def decrypt_and_save_file(self, encrypted_file_data: bytes, filename: str) -> int:
+        """
+        Decrypts the provided encrypted data using the AES key and saves it to a file.
 
-    def decrypt_and_save_file(self, encrypted_file_data, filename: str):
+        Args:
+            encrypted_file_data (bytes): The encrypted file data.
+            filename (str): The name of the file to save the decrypted data.
+
+        Returns:
+            int: CRC32 checksum of the decrypted file.
+
+        Raises:
+            ValueError: If decryption fails.
+        """
         try:
-            # Create AES cipher without padding
             cipher_aes = AES.new(self.aes_key, AES.MODE_CBC, self.iv)
+            decrypted_data = cipher_aes.decrypt(encrypted_file_data)
 
-            # Decrypt without unpadding
-            decrypted_file = cipher_aes.decrypt(encrypted_file_data)
-
-            # Remove any padding if present (PKCS7)
             try:
-                decrypted_file = unpad(decrypted_file, AES.block_size)
+                # Remove PKCS7 padding, if any
+                decrypted_data = unpad(decrypted_data, AES.block_size)
             except ValueError:
                 # If unpadding fails, assume no padding was used
                 pass
 
         except Exception as e:
-            raise ValueError("Decryption failed - " + str(e))
+            raise ValueError(f"Decryption failed: {e}")
 
-        # Save decrypted file
+        # Save the decrypted data to a file
         with open(filename, "wb") as file_out:
-            file_out.write(decrypted_file)
+            file_out.write(decrypted_data)
 
-        # Calculate checksum
-        self.checksum = self.calculate_checksum_crc32(decrypted_file)
+        # Calculate and store checksum
+        self.checksum = self.calculate_checksum_crc32(decrypted_data)
         return self.checksum
 
-    def update_aes_key(self, new_aes_key):
+    def update_aes_key(self, new_aes_key: bytes) -> None:
+        """
+        Updates the AES key.
+
+        Args:
+            new_aes_key (bytes): The new AES key to be set.
+        """
         self.aes_key = new_aes_key
 
-    # Return the checksum of the data crc32
-    def calculate_checksum_crc32(self, data: bytes):
-        return zlib.crc32(data)
+    # @staticmethod
+    # def calculate_checksum_crc32(data: bytes) -> int:
+    #     """
+    #     Calculates the CRC32 checksum of the provided data.
+    #
+    #     Args:
+    #         data (bytes): The data to compute the checksum for.
+    #
+    #     Returns:
+    #         int: CRC32 checksum.
+    #     """
+    #     return zlib.crc32(data)
 
-# # Test the AES_EncryptionKey class
-# public_key = "MIIBIDANBgkqhkiG9w0BAQEFAAOCAQ0AMIIBCAKCAQEAlOnUMm2ESsbCUudERVTYcYhY4plU\nGIfuFt9mwXCNxbf1M5AXOfjTIpUw/ix3YhsFOo5fJDmE4gITc7uO58xvexEbMt3Dq5De2Hn8\nKlJSi1Q7VOk0pbz19HLN6edqPsh71MmRDKZy3K6k+NgK9spanx/NuRWXs53JtPKbdQ+Qbngc\nwrcHzIO4op3rjCfelCVraPOQn9FOzlZ7qcYXhe22B6w2p723W++2xXELa/FXtWbRBWE0Aolk\nQSYaqlcZdaKPB0JG7scEzHKLSncVIpSkpZxpmYAc/wh5tsBUZXJNE2IMp7hLPkWNiIF2SIjo\ngdu8F3UaBRNbMjw6nNWP8YsYpQIBEQ==\n"
-# aes_key_obj = AES_EncryptionKey()
-# aes_key_obj.receive_rsa_public_key(public_key)
-# print(aes_key_obj.get_encrypted_aes_key())
+    @staticmethod
+    def calculate_checksum_crc32(data: bytes) -> int:
+        """
+        Calculates the CRC32 checksum of the provided data.
 
-# try:
-#     with open("received_file.pdf", "rb") as file:
-#         encrypted_file = file.read()
-#         aes_key_obj = AES_EncryptionKey()
-#
-# except FileNotFoundError:
-#     print("File not found")
+        Args:
+            data (bytes): The data to compute the checksum for.
+
+        Returns:
+            int: CRC32 checksum.
+        """
+        n = len(data)
+        i = c = s = 0
+        for ch in data:
+            tabidx = (s >> 24) ^ ch
+            s = UNSIGNED((s << 8)) ^ crctab[tabidx]
+
+        while n:
+            c = n & 0o377
+            n = n >> 8
+            s = UNSIGNED(s << 8) ^ crctab[(s >> 24) ^ c]
+        return UNSIGNED(~s)
