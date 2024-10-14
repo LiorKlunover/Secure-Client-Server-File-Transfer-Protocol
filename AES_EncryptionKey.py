@@ -3,8 +3,8 @@ from Crypto.PublicKey import RSA
 from Crypto.Util.Padding import pad, unpad
 from Crypto.Random import get_random_bytes
 from base64 import b64decode
-import zlib
-import sys
+
+
 
 crctab = [ 0x00000000, 0x04c11db7, 0x09823b6e, 0x0d4326d9, 0x130476dc,
         0x17c56b6b, 0x1a864db2, 0x1e475005, 0x2608edb8, 0x22c9f00f,
@@ -168,18 +168,7 @@ class AES_EncryptionKey:
         """
         self.aes_key = new_aes_key
 
-    # @staticmethod
-    # def calculate_checksum_crc32(data: bytes) -> int:
-    #     """
-    #     Calculates the CRC32 checksum of the provided data.
-    #
-    #     Args:
-    #         data (bytes): The data to compute the checksum for.
-    #
-    #     Returns:
-    #         int: CRC32 checksum.
-    #     """
-    #     return zlib.crc32(data)
+
 
     @staticmethod
     def calculate_checksum_crc32(data: bytes) -> int:

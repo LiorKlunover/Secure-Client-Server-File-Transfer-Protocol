@@ -1,79 +1,11 @@
-# #!/usr/bin/env python3
-# """
-# Secure File Transfer Server
-#
-# This module implements a secure, multi-threaded server for handling encrypted file transfers.
-# It uses AES encryption for file content and manages client connections through a SQLite database.
-#
-# Author: Lior Klunover
-# Version: 1.0.0
-# """
-# import socket
-# import threading
-# from ClientHandler import ClientHandler
-# from DataBaseManager import DataBaseManager
-#
-# # Constants
-# DEFAULT_HOST = '0.0.0.0'
-# DEFAULT_PORT = 1256
-# MAX_CONNECTIONS = 5
-# class Server:
-#     def __init__(self, host = DEFAULT_HOST):
-#         self.host = host
-#         self.version = 20
-#         self.port = self.get_port_from_file()
-#         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-#         self.server_socket.bind((self.host, self.port))
-#         self.server_socket.listen(5)
-#         self.server_db = DataBaseManager()
-#         print(f"Server listening on {self.host}:{self.port}")
-#
-#
-#     def get_port_from_file(self):
-#         try:
-#             with open("port.info", "r") as f:
-#                 return int(f.read())
-#         except FileNotFoundError:
-#             print("File not found")
-#             return DEFAULT_PORT
-#
-#     def get_server_version(self):
-#         return self.version
-#
-#     def start(self):
-#         """Start accepting clients and spawn threads for handling them."""
-#         while True:
-#             client_socket, addr = self.server_socket.accept()
-#             print(f"Accepted connection from {addr}")
-#             client_handler = ClientHandler(client_socket, self, self.server_db)
-#             client_thread = threading.Thread(target=self.handle_client, args=(client_handler,))
-#
-#             client_thread.start()
-#
-#     def handle_client(self, client_handler):
-#         try:
-#             #Receive client request
-#             print("Receiving client request...")
-#             client_handler.start()
-#
-#         except Exception as e:
-#             print(f"Error handling client: {e}")
-#         finally:
-#             client_handler.client_socket.close()
-#
-# if __name__ == "__main__":
-#     server = Server('127.0.0.1')
-#     server.start()
-#
-#
-# !/usr/bin/env python3
+
 """
 Secure File Transfer Server
 
 This module implements a secure, multi-threaded server for handling encrypted file transfers.
 It uses AES encryption for file content and manages client connections through a SQLite database.
 
-Author: [Your Name]
+Author: Lior Klunover
 Version: 1.0.0
 """
 
@@ -132,8 +64,7 @@ class SecureTransferServer:
         self._running = False
         self._server_socket: Optional[socket.socket] = None
         self._clients = set()
-        self.version = 20  # Consider moving this to config
-
+        self.version = 20
         try:
             self.database = DataBaseManager(self.config.db_path)
             self.logger.info("Database connection established successfully")

@@ -70,25 +70,26 @@ class DataBaseManager:
         Returns:
             Optional[bytes]: The client_id if successful, None otherwise
         """
-        with self.shared_lock:
+        with self.shared_lock:  # Ensure thread-safe access to the database
             try:
-                with self._create_connection() as conn:
-                    if self._check_client_name_exists(client_name, conn):
-                        print("Client name already exists")
-                        return None
+                with self._create_connection() as conn:  # Create a new database connection
+                    if self._check_client_name_exists(client_name, conn):  # Check if the client name already exists
+                        print("Client name already exists")  # Print a message if the client name exists
+                        return None  # Return None if the client name exists
 
-                    client_id = uuid.uuid4().bytes
-                    last_seen = datetime.now().isoformat()
+                    client_id = uuid.uuid4().bytes  # Generate a new UUID for the client ID
+                    last_seen = datetime.now().isoformat()  # Get the current timestamp for last seen
 
+                    # Insert the new client into the database
                     conn.execute('''
-                               INSERT INTO clients (client_id, client_name, public_key, last_seen, aes_key)
-                               VALUES (?, ?, ?, ?, ?)
-                           ''', (client_id, client_name, '', last_seen, ''))
+                        INSERT INTO clients (client_id, client_name, public_key, last_seen, aes_key)
+                        VALUES (?, ?, ?, ?, ?)
+                    ''', (client_id, client_name, '', last_seen, ''))
 
-                    return client_id
-            except sqlite3.Error as e:
-                print(f"Database error occurred: {e}")
-                return None
+                    return client_id  # Return the client ID if successful
+            except sqlite3.Error as e:  # Handle any SQLite errors
+                print(f"Database error occurred: {e}")  # Print the error message
+                return None  # Return None if an error occurs
 
     def add_file(self, client_id: bytes, file_name: str, path_name: str, verified: bool) -> bool:
         """
@@ -106,146 +107,172 @@ class DataBaseManager:
         Raises:
             ValueError: If input parameters don't meet requirements
         """
-        self.validate_file_params(client_id, file_name, path_name)
+        self.validate_file_params(client_id, file_name, path_name)  # Validate the input parameters
 
-        with self.shared_lock:
+        with self.shared_lock:  # Ensure thread-safe access to the database
             try:
-                with self._create_connection() as conn:
-                    if not self._client_exists(client_id, conn):
-                        return False
-                    if self._check_file_exists(client_id, file_name, conn):
-                        print("File already exists")
-                        return True
+                with self._create_connection() as conn:  # Create a new database connection
+                    if not self._client_exists(client_id, conn):  # Check if the client exists in the database
+                        return False  # Return False if the client does not exist
+                    if self._check_file_exists(client_id, file_name, conn):  # Check if the file already exists for the client
+                        print("File already exists")  # Print a message indicating the file already exists
+                        return True  # Return True since the file already exists
+                    # Insert the new file entry into the database
                     conn.execute('''
-                         INSERT INTO files (client_id, file_name, path_name, verified)
-                         VALUES (?, ?, ?, ?)
-                     ''', (client_id, file_name, path_name, verified))
-                    return True
+                        INSERT INTO files (client_id, file_name, path_name, verified)
+                        VALUES (?, ?, ?, ?)
+                    ''', (client_id, file_name, path_name, verified))
+                    return True  # Return True if the file entry was successfully added
             except sqlite3.IntegrityError:
-
-                return False
+                return False  # Return False if there is an integrity error
             except sqlite3.Error as e:
-                print(f"Database error occurred: {e}")
-                return False
+                print(f"Database error occurred: {e}")  # Print the error message
+                return False  # Return False if a database error occurs
 
 
     def validate_file_params(self, client_id: bytes, file_name: str, path_name: str) -> None:
         """Validate parameters for file operations."""
+        # Check if client_id is a bytes object and exactly 16 bytes long
         if not isinstance(client_id, bytes) or len(client_id) != 16:
             raise ValueError("client_id must be exactly 16 bytes")
+
+        # Check if file_name is a string and its length is ≤ 32 characters
         if not isinstance(file_name, str) or len(file_name) > 32:
             raise ValueError("file_name must be ≤ 32 characters")
+
+        # Check if path_name is a string and its length is ≤ 32 characters
         if not isinstance(path_name, str) or len(path_name) > 32:
             raise ValueError("path_name must be ≤ 32 characters")
 
     @staticmethod
-    def _check_file_exists(client_id, file_name,conn) -> bool:
+    def _check_file_exists(client_id, file_name, conn) -> bool:
         try:
+            # Execute SQL query to count the number of files with the given client_id and file_name
             cursor = conn.execute('''
-                           SELECT COUNT(*) FROM files WHERE client_id = ? AND file_name = ?
-                       ''', (client_id, file_name))
+                SELECT COUNT(*) FROM files WHERE client_id = ? AND file_name = ?
+            ''', (client_id, file_name))
+
+            # Fetch the result and check if the count is greater than 0
             result = cursor.fetchone()[0] > 0
-            return result
+            return result  # Return True if the file exists, otherwise False
         except sqlite3.Error as e:
-            print(e)
-            return False
+            print(e)  # Print the error message if an SQLite error occurs
+            return False  # Return False if an error occurs
+
     def update_file_verified(self, client_id, file_name, verified) -> None:
+        # Acquire the shared lock to ensure thread-safe access to the database
         with DataBaseManager.shared_lock:
             try:
+                # Create a new database connection
                 conn = self._create_connection()
+                # Execute the SQL query to update the 'verified' status of the file
                 conn.execute('''
                     UPDATE files SET verified = ? WHERE client_id = ? AND file_name = ?
                 ''', (verified, client_id, file_name))
+                # Commit the transaction to save changes
                 conn.commit()
+                # Close the database connection
                 conn.close()
             except sqlite3.Error as e:
+                # Print the error message if an SQLite error occurs
                 print(e)
 
     def add_public_key(self, client_id, public_key) -> None:
+        # Acquire the shared lock to ensure thread-safe access to the database
         with DataBaseManager.shared_lock:
             try:
+                # Create a new database connection
                 conn = self._create_connection()
+                # Execute the SQL query to update the public key for the given client_id
                 conn.execute('''
                     UPDATE clients SET public_key = ? WHERE client_id = ?
                 ''', (public_key, client_id))
+                # Commit the transaction to save changes
                 conn.commit()
+                # Close the database connection
                 conn.close()
             except sqlite3.Error as e:
+                # Print the error message if an SQLite error occurs
                 print(e)
+
     def add_aes_key(self, client_id, aes_key) -> None:
+        # Acquire the shared lock to ensure thread-safe access to the database
         with DataBaseManager.shared_lock:
             try:
+                # Create a new database connection
                 conn = self._create_connection()
+                # Execute the SQL query to update the AES key for the given client_id
                 conn.execute('''
                     UPDATE clients SET aes_key = ? WHERE client_id = ?
                 ''', (aes_key, client_id))
+                # Commit the transaction to save changes
                 conn.commit()
+                # Close the database connection
                 conn.close()
             except sqlite3.Error as e:
+                # Print the error message if an SQLite error occurs
                 print(e)
 
     def get_client(self, client_id) -> Optional[Tuple[str, str, str, str]]:
+        # Acquire the shared lock to ensure thread-safe access to the database
         with DataBaseManager.shared_lock:
             try:
+                # Create a new database connection
                 conn = self._create_connection()
+                # Execute the SQL query to retrieve client information based on client_id
                 cursor = conn.execute('''
                     SELECT client_name, public_key, last_seen, aes_key FROM clients WHERE client_id = ?
                 ''', (client_id,))
+                # Fetch the first result from the query
                 result = cursor.fetchone()
+                # Close the database connection
                 conn.close()
+                # Return the result (client_name, public_key, last_seen, aes_key) or None if no result is found
                 return result
             except sqlite3.Error as e:
+                # Print the error message if an SQLite error occurs
                 print(e)
                 return None
 
     def get_client_id(self, client_name) -> Optional[bytes]:
+        # Acquire the shared lock to ensure thread-safe access to the database
         with DataBaseManager.shared_lock:
             try:
+                # Create a new database connection
                 conn = self._create_connection()
+                # Execute the SQL query to retrieve the client_id based on client_name
                 cursor = conn.execute('''
                     SELECT client_id FROM clients WHERE client_name = ?
                 ''', (client_name,))
+                # Fetch the first result from the query
                 result = cursor.fetchone()
+                # Close the database connection
                 conn.close()
+                # Return the client_id or None if no result is found
                 return result[0]
             except sqlite3.Error as e:
-                print(e)
-                return None
-    def check_client_name_exists(self, client_name, conn) -> bool:
-        try:
-            cursor = conn.execute('''
-                           SELECT COUNT(*) FROM clients WHERE client_name = ?
-                       ''', (client_name,))
-            return cursor.fetchone()[0] > 0
-        except sqlite3.Error as e:
-            print(e)
-            return False
-
-    def get_aes_key(self, client_id) -> Optional[str]:
-        with DataBaseManager.shared_lock:
-            try:
-                conn = self._create_connection()
-                cursor = conn.execute('''
-                    SELECT aes_key FROM clients WHERE client_id = ?
-                ''', (client_id,))
-                result = cursor.fetchone()
-                conn.close()
-                return result[0]
-            except sqlite3.Error as e:
+                # Print the error message if an SQLite error occurs
                 print(e)
                 return None
 
     def update_last_seen(self, client_id) -> None:
+        # Acquire the shared lock to ensure thread-safe access to the database
         with DataBaseManager.shared_lock:
             try:
+                # Create a new database connection
                 conn = self._create_connection()
+                # Get the current timestamp in ISO format
                 last_seen = datetime.now().isoformat()
+                # Execute the SQL query to update the last_seen timestamp for the given client_id
                 conn.execute('''
                     UPDATE clients SET last_seen = ? WHERE client_id = ?
                 ''', (last_seen, client_id))
+                # Commit the transaction to save changes
                 conn.commit()
+                # Close the database connection
                 conn.close()
             except sqlite3.Error as e:
+                # Print the error message if an SQLite error occurs
                 print(e)
 
     def _client_exists(self, client_id: bytes, conn: sqlite3.Connection) -> bool:
